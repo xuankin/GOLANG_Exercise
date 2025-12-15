@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"Learn_Gin/model"
+	"Learn_Gin/entity"
 	"encoding/json"
 	"os"
 )
@@ -17,8 +17,8 @@ func NewUserRepository(filePath string) *UserRepository {
 }
 
 // Ham doc du lieu tu file
-func (r *UserRepository) loadData() ([]model.User, error) {
-	var users []model.User
+func (r *UserRepository) loadData() ([]entity.User, error) {
+	var users []entity.User
 	if _, err := os.Stat(r.filePath); os.IsNotExist(err) {
 		return users, nil
 	}
@@ -34,17 +34,17 @@ func (r *UserRepository) loadData() ([]model.User, error) {
 }
 
 // Ham ghu du lieu vao file
-func (r *UserRepository) saveData(users []model.User) error {
+func (r *UserRepository) saveData(users []entity.User) error {
 	data, err := json.MarshalIndent(users, "", "   ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(r.filePath, data, 0644)
 }
-func (r *UserRepository) FindAll() ([]model.User, error) {
+func (r *UserRepository) FindAll() ([]entity.User, error) {
 	return r.loadData()
 }
-func (r *UserRepository) FindById(id int) (*model.User, error) {
+func (r *UserRepository) FindById(id int) (*entity.User, error) {
 	users, err := r.loadData()
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func (r *UserRepository) FindById(id int) (*model.User, error) {
 	}
 	return nil, nil
 }
-func (r *UserRepository) Create(user model.User) error {
+func (r *UserRepository) Create(user entity.User) error {
 	users, err := r.loadData()
 	if err != nil {
 		return err
@@ -64,7 +64,7 @@ func (r *UserRepository) Create(user model.User) error {
 	users = append(users, user)
 	return r.saveData(users)
 }
-func (r *UserRepository) Update(id int, updatedUser model.User) error {
+func (r *UserRepository) Update(id int, updatedUser entity.User) error {
 	users, err := r.loadData()
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func (r *UserRepository) Delete(id int) error {
 	if err != nil {
 		return err
 	}
-	newUsers := make([]model.User, 0)
+	newUsers := make([]entity.User, 0)
 	for _, user := range users {
 		if user.ID != id {
 			newUsers = append(newUsers, user)

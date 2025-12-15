@@ -55,16 +55,18 @@ func (uc *UserController) GetUserById(c *gin.Context) {
 //Post /users
 
 func (uc *UserController) CreateUser(c *gin.Context) {
-	var newUser model.User
+	var newUser model.CreateUserRequest
 	if err := c.ShouldBindJSON(&newUser); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
 		return
 	}
-	if err := uc.userService.CreateUser(&newUser); err != nil {
+	createdUser, err := uc.userService.CreateUser(newUser)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
+			"data":  createdUser,
 		})
 		return
 	}
@@ -77,7 +79,7 @@ func (uc *UserController) CreateUser(c *gin.Context) {
 // PUT / users/:id
 func (uc *UserController) UpdateUser(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	var updateUser model.User
+	var updateUser model.UpdateUserRequest
 	if err := c.ShouldBindJSON(&updateUser); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),

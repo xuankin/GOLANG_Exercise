@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Learn_Gin/entity"
 	"Learn_Gin/model"
 	"Learn_Gin/repository"
 )
@@ -14,13 +15,13 @@ func NewUserService(repo *repository.UserRepository) *UserService {
 		repo: repo,
 	}
 }
-func (s *UserService) GetUsers() ([]model.User, error) {
+func (s *UserService) GetUsers() ([]entity.User, error) {
 	return s.repo.FindAll()
 }
-func (s *UserService) GetUserById(id int) (*model.User, error) {
+func (s *UserService) GetUserById(id int) (*entity.User, error) {
 	return s.repo.FindById(id)
 }
-func (s *UserService) CreateUser(user *model.User) error {
+func (s *UserService) CreateUser(user model.CreateUserRequest) (*entity.User, error) {
 	users, _ := s.repo.FindAll()
 	maxId := 0
 	for i := 0; i < len(users); i++ {
@@ -28,11 +29,20 @@ func (s *UserService) CreateUser(user *model.User) error {
 			maxId = users[i].ID
 		}
 	}
-	user.ID = maxId + 1
-	return s.repo.Create(*user)
+	newUser := entity.User{
+		ID:    maxId + 1,
+		Name:  user.Name,
+		Email: user.Email,
+	}
+	err := s.repo.Create(newUser)
+	return &newUser, err
 }
-func (s *UserService) UpdateUser(id int, user model.User) error {
-	return s.repo.Update(id, user)
+func (s *UserService) UpdateUser(id int, req model.UpdateUserRequest) error {
+	updateData := entity.User{
+		Name:  req.Name,
+		Email: req.Email,
+	}
+	return s.repo.Update(id, updateData)
 }
 func (s *UserService) DeleteUser(id int) error {
 	return s.repo.Delete(id)
