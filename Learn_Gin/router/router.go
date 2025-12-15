@@ -6,7 +6,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter(r *gin.Engine) {
-	usersController := controller.NewUserController()
-	r.GET("/users", usersController.GetUsers)
+func SetupRouter(r *gin.Engine, userController *controller.UserController) {
+	userGroup := r.Group("/user")
+	{
+		userGroup.GET("/", userController.GetUsers)
+		userGroup.GET("/:id", userController.GetUserById)
+		userGroup.POST("/", userController.CreateUser)
+		userGroup.PUT("/:id", userController.UpdateUser)
+		userGroup.DELETE("/:id", userController.DeleteUser)
+	}
 }
