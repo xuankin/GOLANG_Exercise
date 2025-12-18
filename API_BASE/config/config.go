@@ -1,10 +1,18 @@
 package config
 
-import "github.com/spf13/viper"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 type Config struct {
-	DbSource   string `mapstructure:"DB_SOURCE"`
-	ServerAddr string `mapstructure:"SERVER_ADDRESS"`
+	DbSource           string        `mapstructure:"DB_SOURCE"`
+	ServerAddr         string        `mapstructure:"SERVER_ADDRESS"`
+	JWTSecret          string        `mapstructure:"JWT_SECRET"`
+	JWTRefreshSecret   string        `mapstructure:"JWT_REFRESH_SECRET"`
+	JWTDuration        time.Duration `mapstructure:"JWT_DURATION"`
+	JWTRefreshDuration time.Duration `mapstructure:"JWT_REFRESH_DURATION"`
 }
 
 func LoadConfig(path string) (config Config, err error) {

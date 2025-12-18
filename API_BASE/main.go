@@ -16,11 +16,11 @@ func main() {
 		log.Fatal("Khong the load config file.")
 	}
 	db := config.ConnectDB(&conf)
-	db.AutoMigrate(&entity.User{})
+	db.AutoMigrate(&entity.User{}, &entity.Session{})
 	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo)
-	userController := controller.NewUserController(userService)
-	r := router.SetupRouter(userController)
+	userController := controller.NewUserController(userService, &conf)
+	r := router.SetupRouter(userController, &conf)
 	log.Println("Server start...", conf.ServerAddr)
 	if err := r.Run(conf.ServerAddr); err != nil {
 		log.Fatal("Server start error.")

@@ -1,23 +1,32 @@
 package router
 
 import (
+	"API_BASE/config"
 	"API_BASE/controller"
+	"API_BASE/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter(uc *controller.UserController) *gin.Engine {
+func SetupRouter(uc *controller.UserController, conf *config.Config) *gin.Engine {
 	r := gin.Default()
 	v1 := r.Group("/api/v1")
 	{
-		user1 := v1.Group("/users")
+		auth := v1.Group("/auth")
 		{
-			user1.GET("/", uc.GetAllUsers)
-			user1.POST("/", uc.CreateUser)
-			user1.PUT("/:id", uc.UpdateUser)
-			user1.GET("/:id", uc.GetUserByID)
-			user1.DELETE("/:id", uc.DeleteUserByID)
-
+			auth.POST("/register", uc.CreateUser)
+			auth.POST("/login", uc.Login)
+			auth.POST("/refresh", uc.RefreshToken)
+		}
+		userRoutes := v1.Group("/users")
+		userRoutes.Use(middleware.AuthMiddleWare(conf.JWTSecret))
+		{
+			userRoutes.GET("/", uc.GetAllUsers)
+			userRoutes.POST("/", uc.CreateUser)
+			userRoutes.GET("/:id", uc.GetUserByID)
+			userRoutes.PUT("/:id", uc.UpdateUser)
+			userRoutes.DELETE("/:id", uc.DeleteUserByID)
+			userRoutes.POST("/logout", uc.Logout)
 		}
 	}
 	return r

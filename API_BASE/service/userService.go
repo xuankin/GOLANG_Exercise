@@ -1,18 +1,28 @@
 package service
 
 import (
+	"API_BASE/config"
 	"API_BASE/entity"
 	"API_BASE/models"
 	"API_BASE/repository"
+	"API_BASE/utils"
 	"errors"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type UserService interface {
 	CreateUser(req *models.UserRequest) (*models.UserResponse, error)
 	GetAllUsers() ([]models.UserResponse, error)
-	GetUserByID(id uint) (*models.UserResponse, error)
-	UpdateUserByID(id uint, req *models.UserUpdate) error
-	DeleteUserByID(id uint) error
+	GetUserByID(id uuid.UUID) (*models.UserResponse, error)
+	UpdateUserByID(id uuid.UUID, req *models.UserUpdate) (error, int)
+	DeleteUserByID(id uuid.UUID) error
+	Login(req *models.LoginRequest, conf *config.Config) (*models.LoginResponse, error)
+	RefreshToken(token string, conf *config.Config) (*models.LoginResponse, error)
+	Logout(token string) error
 }
 type userService struct {
 	repo repository.UserRepository
@@ -31,10 +41,11 @@ func mapToResponse(user *entity.User) models.UserResponse {
 	}
 }
 func (s *userService) CreateUser(req *models.UserRequest) (*models.UserResponse, error) {
+	hashedPassword, _ := utils.HashPassword(req.Password)
 	userEntity := entity.User{
 		Name:     req.Name,
 		Email:    req.Email,
-		Password: req.Password,
+		Password: hashedPassword,
 	}
 	if err := s.repo.Create(&userEntity); err != nil {
 		return nil, err
@@ -53,7 +64,7 @@ func (s *userService) GetAllUsers() ([]models.UserResponse, error) {
 	}
 	return response, nil
 }
-func (s *userService) GetUserByID(id uint) (*models.UserResponse, error) {
+func (s *userService) GetUserByID(id uuid.UUID) (*models.UserResponse, error) {
 	user, err := s.repo.FindById(id)
 	if err != nil {
 		return nil, err
@@ -61,13 +72,10 @@ func (s *userService) GetUserByID(id uint) (*models.UserResponse, error) {
 	response := mapToResponse(user)
 	return &response, nil
 }
-func (s *userService) UpdateUserByID(id uint, req *models.UserUpdate) error {
+func (s *userService) UpdateUserByID(id uuid.UUID, req *models.UserUpdate) (error, int) {
 	user, err := s.repo.FindById(id)
-	if err != nil {
-		return err
-	}
-	if user == nil {
-		return errors.New("user not found")
+	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
+		return errors.New("user not found"), http.StatusNotFound
 	}
 	if req.Name != "" {
 		user.Name = req.Name
@@ -78,9 +86,14 @@ func (s *userService) UpdateUserByID(id uint, req *models.UserUpdate) error {
 	if req.Password != "" {
 		user.Password = req.Password
 	}
-	return s.repo.Update(user)
+	err = s.repo.Update(user)
+	if err != nil {
+		return err, http.StatusInternalServerError
+	}
+
+	return nil, http.StatusOK
 }
-func (s *userService) DeleteUserByID(id uint) error {
+func (s *userService) DeleteUserByID(id uuid.UUID) error {
 	user, err := s.repo.FindById(id)
 	if err != nil {
 		return err
@@ -89,4 +102,60 @@ func (s *userService) DeleteUserByID(id uint) error {
 		return errors.New("user not found")
 	}
 	return s.repo.Delete(user)
+}
+
+func (s *userService) Login(req *models.LoginRequest, conf *config.Config) (*models.LoginResponse, error) {
+	user, err := s.repo.FindByEmail(req.Email)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+	if !utils.CheckPasswordHash(req.Password, user.Password) {
+		return nil, errors.New("invalid password")
+	}
+	acessToken, _ := utils.GenerateToken(user.ID, conf.JWTSecret, conf.JWTDuration)
+	refreshToken, _ := utils.GenerateToken(user.ID, conf.JWTRefreshSecret, conf.JWTRefreshDuration)
+	hashedRT := utils.HashToken(refreshToken)
+	session := &entity.Session{
+		UserID:       user.ID,
+		RefreshToken: hashedRT,
+		ExpiresAt:    time.Now().Add(conf.JWTRefreshDuration),
+	}
+	s.repo.CreateSession(session)
+	return &models.LoginResponse{
+		AccessToken:  acessToken,
+		RefreshToken: refreshToken,
+		User:         mapToResponse(user),
+	}, nil
+}
+func (s *userService) RefreshToken(token string, conf *config.Config) (*models.LoginResponse, error) {
+	hashedRT := utils.HashToken(token)
+	session, err := s.repo.FindSession(hashedRT)
+	if err != nil {
+		return nil, errors.New("token hết hạn hoặc không hợp lệ")
+	}
+	if session.ExpiresAt.Before(time.Now()) {
+		s.repo.DeleteSession(hashedRT)
+		return nil, errors.New("phiên đăng nhập đã hết hạn")
+	}
+	s.repo.DeleteSession(hashedRT)
+	newAccessToken, _ := utils.GenerateToken(session.ID, conf.JWTSecret, conf.JWTDuration)
+	newRefreshToken, _ := utils.GenerateToken(session.ID, conf.JWTRefreshSecret, conf.JWTRefreshDuration)
+	newHashedRT := utils.HashToken(newRefreshToken)
+	newSession := &entity.Session{
+		UserID:       session.UserID,
+		RefreshToken: newHashedRT,
+		ExpiresAt:    session.ExpiresAt,
+		IsRevoked:    false,
+	}
+	s.repo.CreateSession(newSession)
+	user, _ := s.repo.FindById(session.UserID)
+	return &models.LoginResponse{
+		AccessToken:  newAccessToken,
+		RefreshToken: newRefreshToken,
+		User:         mapToResponse(user),
+	}, nil
+}
+func (s *userService) Logout(token string) error {
+	hashedRT := utils.HashToken(token)
+	return s.repo.DeleteSession(hashedRT)
 }
