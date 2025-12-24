@@ -35,3 +35,20 @@ type LoginResponse struct {
 	RefreshToken string       `json:"refresh_token"`
 	User         UserResponse `json:"user"`
 }
+type UserQueryParams struct {
+	Keyword string `form:"keyword"`
+	Page    int    `form:"page,default=1"`
+	Limit   int    `form:"limit,default=5"`
+	SortBy  string `form:"sort_by,default=created_at"`
+	Order   string `form:"order,default=desc"`
+}
+type PaginatedUserResponse struct {
+	Data       []UserResponse `json:"data"`
+	Pagination Pagination     `json:"pagination"`
+}
+type Pagination struct {
+	Current    int `json:"current_page"`
+	TotalPage  int `json:"total_page"`
+	ToTalItems int `json:"to_tal_items"`
+	Limit      int `json:"limit"`
+}

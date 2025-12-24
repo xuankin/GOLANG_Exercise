@@ -6,7 +6,11 @@ import (
 	"API_BASE/models"
 	"API_BASE/repository"
 	"API_BASE/utils"
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"math"
 	"net/http"
 	"time"
 
@@ -16,7 +20,7 @@ import (
 
 type UserService interface {
 	CreateUser(req *models.UserRequest) (*models.UserResponse, error)
-	GetAllUsers() ([]models.UserResponse, error)
+	GetAllUsers(params models.UserQueryParams) (*models.PaginatedUserResponse, error)
 	GetUserByID(id uuid.UUID) (*models.UserResponse, error)
 	UpdateUserByID(id uuid.UUID, req *models.UserUpdate) (error, int)
 	DeleteUserByID(id uuid.UUID) error
@@ -50,19 +54,46 @@ func (s *userService) CreateUser(req *models.UserRequest) (*models.UserResponse,
 	if err := s.repo.Create(&userEntity); err != nil {
 		return nil, err
 	}
+
 	response := mapToResponse(&userEntity)
+	go s.repo.ClearAllSearchCache()
 	return &response, nil
 }
-func (s *userService) GetAllUsers() ([]models.UserResponse, error) {
-	users, err := s.repo.FindAll()
+func generateCacheKey(p models.UserQueryParams) string {
+	raw := fmt.Sprintf("k=%s|p=%s|l=%d|s=%s|o=%s", p.Keyword, p.Page, p.Limit, p.SortBy, p.Order)
+	hasher := md5.New()
+	hasher.Write([]byte(raw))
+	return "search:ids:" + hex.EncodeToString(hasher.Sum(nil))
+}
+func (s *userService) GetAllUsers(params models.UserQueryParams) (*models.PaginatedUserResponse, error) {
+	cacheKey := generateCacheKey(params)
+	cachedUsers, totalItems, err := s.repo.GetSearchCacheUsers(cacheKey)
+
 	if err != nil {
-		return nil, err
+		userEntity, total, errDB := s.repo.FindUsers(params)
+		if errDB != nil {
+			return nil, errDB
+		}
+		totalItems = total
+		cachedUsers = []models.UserResponse{}
+		for _, user := range userEntity {
+			cachedUsers = append(cachedUsers, mapToResponse(&user))
+		}
+		go s.repo.SetSearchCacheUsers(cacheKey, cachedUsers, total)
 	}
-	var response []models.UserResponse
-	for _, user := range users {
-		response = append(response, mapToResponse(&user))
+	totalPages := int(math.Ceil(float64(totalItems) / float64(params.Limit)))
+	if totalItems == 0 {
+		totalPages = 0
 	}
-	return response, nil
+	return &models.PaginatedUserResponse{
+		Data: cachedUsers,
+		Pagination: models.Pagination{
+			Current:    params.Page,
+			TotalPage:  totalPages,
+			ToTalItems: int(totalItems),
+			Limit:      params.Limit,
+		},
+	}, nil
 }
 func (s *userService) GetUserByID(id uuid.UUID) (*models.UserResponse, error) {
 	user, err := s.repo.FindById(id)
@@ -90,6 +121,7 @@ func (s *userService) UpdateUserByID(id uuid.UUID, req *models.UserUpdate) (erro
 	if err != nil {
 		return err, http.StatusInternalServerError
 	}
+	go s.repo.ClearAllSearchCache()
 
 	return nil, http.StatusOK
 }
@@ -101,7 +133,10 @@ func (s *userService) DeleteUserByID(id uuid.UUID) error {
 	if user == nil {
 		return errors.New("user not found")
 	}
-	return s.repo.Delete(user)
+	if err := s.repo.ClearUserObjectCache(id); err != nil {
+		return err
+	}
+	return s.repo.ClearAllSearchCache()
 }
 
 func (s *userService) Login(req *models.LoginRequest, conf *config.Config) (*models.LoginResponse, error) {
@@ -120,7 +155,7 @@ func (s *userService) Login(req *models.LoginRequest, conf *config.Config) (*mod
 		RefreshToken: hashedRT,
 		ExpiresAt:    time.Now().Add(conf.JWTRefreshDuration),
 	}
-	s.repo.CreateSession(session)
+	s.repo.SetSession(session, conf.JWTRefreshDuration)
 	return &models.LoginResponse{
 		AccessToken:  acessToken,
 		RefreshToken: refreshToken,
@@ -131,11 +166,11 @@ func (s *userService) RefreshToken(token string, conf *config.Config) (*models.L
 	hashedRT := utils.HashToken(token)
 	session, err := s.repo.FindSession(hashedRT)
 	if err != nil {
-		return nil, errors.New("token hết hạn hoặc không hợp lệ")
+		return nil, errors.New("Token expired or invalid")
 	}
 	if session.ExpiresAt.Before(time.Now()) {
 		s.repo.DeleteSession(hashedRT)
-		return nil, errors.New("phiên đăng nhập đã hết hạn")
+		return nil, errors.New("Session expired")
 	}
 	s.repo.DeleteSession(hashedRT)
 	newAccessToken, _ := utils.GenerateToken(session.ID, conf.JWTSecret, conf.JWTDuration)
@@ -147,7 +182,7 @@ func (s *userService) RefreshToken(token string, conf *config.Config) (*models.L
 		ExpiresAt:    session.ExpiresAt,
 		IsRevoked:    false,
 	}
-	s.repo.CreateSession(newSession)
+	s.repo.SetSession(newSession, conf.JWTRefreshDuration)
 	user, _ := s.repo.FindById(session.UserID)
 	return &models.LoginResponse{
 		AccessToken:  newAccessToken,

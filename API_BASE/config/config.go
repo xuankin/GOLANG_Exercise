@@ -13,6 +13,9 @@ type Config struct {
 	JWTRefreshSecret   string        `mapstructure:"JWT_REFRESH_SECRET"`
 	JWTDuration        time.Duration `mapstructure:"JWT_DURATION"`
 	JWTRefreshDuration time.Duration `mapstructure:"JWT_REFRESH_DURATION"`
+	RedisAddr          string        `mapstructure:"REDIS_ADDRESS"`
+	RedisPassword      string        `mapstructure:"REDIS_PASSWORD"`
+	RedisDB            int           `mapstructure:"REDIS_DB"`
 }
 
 func LoadConfig(path string) (config Config, err error) {

@@ -13,11 +13,12 @@ import (
 func main() {
 	conf, err := config.LoadConfig(".")
 	if err != nil {
-		log.Fatal("Khong the load config file.")
+		log.Fatal("Cannot load config file")
 	}
 	db := config.ConnectDB(&conf)
-	db.AutoMigrate(&entity.User{}, &entity.Session{})
-	userRepo := repository.NewUserRepository(db)
+	rdb := config.ConnectRedis(&conf)
+	db.AutoMigrate(&entity.User{})
+	userRepo := repository.NewUserRepository(db, rdb)
 	userService := service.NewUserService(userRepo)
 	userController := controller.NewUserController(userService, &conf)
 	r := router.SetupRouter(userController, &conf)

@@ -36,12 +36,17 @@ func (uc *UserController) CreateUser(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"userResponse": userResponse})
 }
 func (uc *UserController) GetAllUsers(c *gin.Context) {
-	users, err := uc.userService.GetAllUsers()
+	var prams models.UserQueryParams
+	if err := c.ShouldBindQuery(&prams); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	result, err := uc.userService.GetAllUsers(prams)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"users": users})
+	c.JSON(http.StatusOK, gin.H{"users": result})
 }
 func (uc *UserController) GetUserByID(c *gin.Context) {
 	id, _ := uuid.Parse(c.Param("id"))
@@ -67,7 +72,7 @@ func (uc *UserController) UpdateUser(c *gin.Context) {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Cap nhat thanh cong"})
+	c.JSON(http.StatusOK, gin.H{"message": "Update successful"})
 }
 func (uc *UserController) DeleteUserByID(c *gin.Context) {
 	id, _ := uuid.Parse(c.Param("id"))
@@ -107,8 +112,8 @@ func (uc *UserController) Logout(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	refreshToken := strings.TrimPrefix(authHeader, "Bearer ")
 	if err := uc.userService.Logout(refreshToken); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Khong the dang xuat"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Logout failed"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"Logout": "Dang xuat thanh cong"})
+	c.JSON(http.StatusOK, gin.H{"Logout": "Logout successful"})
 }

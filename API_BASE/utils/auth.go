@@ -32,7 +32,7 @@ func VerifyToken(tokenString string, secret string) (uuid.UUID, error) {
 		return []byte(secret), nil
 	})
 	if err != nil || !token.Valid {
-		return uuid.Nil, errors.New("token khong hop le")
+		return uuid.Nil, errors.New("Invalid token")
 	}
 	claims, _ := token.Claims.(jwt.MapClaims)
 	uid, _ := uuid.Parse(claims["sub"].(string))
